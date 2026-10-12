@@ -8,6 +8,8 @@ from app.schemas.ai import (
     AIStatusResponse,
     FollowUpRequest,
     FollowUpResponse,
+    ImageAnalysisRequest,
+    ImageAnalysisResponse,
     QuestGenerateRequest,
     QuestRecommendRequest,
     ReflectionRequest,
@@ -133,3 +135,67 @@ async def generate_reflection(data: ReflectionRequest):
 async def generate_follow_up(data: FollowUpRequest):
     result = await quest_agent.generate_follow_up(data.quest_id, data.observation)
     return ResponseEnvelope(data=FollowUpResponse(**result))
+
+
+@router.post(
+    "/vision/analyze",
+    response_model=ResponseEnvelope[ImageAnalysisResponse],
+    summary="Analyze outdoor photo with Moondream vision understanding",
+)
+async def analyze_photo(data: ImageAnalysisRequest):
+    result = await quest_agent.analyze_image(
+        image_base64=data.image_base64,
+        prompt=data.prompt,
+        skill_category=data.skill_category,
+    )
+    return ResponseEnvelope(
+        data=ImageAnalysisResponse(
+            description=result["description"],
+            observable_details=result.get("observable_details", []),
+            perceived_category=result.get("perceived_category", SkillCategory.VISUAL_EXPLORER),
+            uncertainty_note=result.get("uncertainty_note"),
+            source=result.get("source", "moondream"),
+        )
+    )
+
+
+@router.post(
+    "/vision/quest-from-image",
+    response_model=ResponseEnvelope[ImageAnalysisResponse],
+    summary="Generate an observation quest from an analyzed photograph using Moondream",
+)
+async def quest_from_image(data: ImageAnalysisRequest):
+    result = await quest_agent.generate_quest_from_image(
+        image_base64=data.image_base64,
+        skill_category=data.skill_category,
+        difficulty=data.difficulty,
+    )
+    analysis = result["analysis"]
+    quest = result["quest"]
+    quest_dict = QuestResponse(
+        id=quest.id,
+        title=quest.title,
+        description=quest.description,
+        skill_category=quest.skill_category,
+        duration_minutes=quest.duration_minutes,
+        difficulty=quest.difficulty,
+        instructions=quest.instructions,
+        reflection_questions=quest.reflection_questions,
+        completion_criteria=quest.completion_criteria,
+        optional_follow_up_prompt=quest.optional_follow_up_prompt,
+        generation_source=quest.generation_source,
+        active=quest.active,
+        created_at=quest.created_at,
+    ).model_dump()
+
+    return ResponseEnvelope(
+        data=ImageAnalysisResponse(
+            description=analysis["description"],
+            observable_details=analysis.get("observable_details", []),
+            perceived_category=analysis.get("perceived_category", SkillCategory.VISUAL_EXPLORER),
+            uncertainty_note=analysis.get("uncertainty_note"),
+            generated_quest=quest_dict,
+            source=result.get("source", "moondream"),
+        )
+    )
+

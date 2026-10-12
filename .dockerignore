@@ -1,0 +1,45 @@
+# Git & agent tracking
+.git
+.gitignore
+.agents
+.vscode
+.idea
+
+# Python caches and local virtualenvs
+**/__pycache__
+**/*.py[cod]
+*$py.class
+**/.pytest_cache
+**/.venv
+venv/
+ENV/
+
+# Node & frontend dependencies and local build outputs
+**/node_modules
+frontend/dist
+dist/
+.npm
+
+# Secrets and environment configurations
+**/.env
+**/.env.*
+!**/.env.example
+
+# Model files (weights must NEVER be baked into the image)
+models/
+**/*.gguf
+**/*.bin
+**/*.pt
+**/*.safetensors
+**/*.onnx
+
+# Data persistence volumes
+mongo-data/
+ollama-models/
+*.sqlite3
+*.db
+
+# Logs and scratch artifacts
+logs/
+*.log
+scratch/

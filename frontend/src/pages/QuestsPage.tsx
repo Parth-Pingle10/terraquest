@@ -31,7 +31,8 @@ import {
   Building2,
   ChevronRight,
   Flame,
-  AlertCircle
+  AlertCircle,
+  Camera,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -68,6 +69,105 @@ export const QuestsPage: React.FC = () => {
   const [aiDuration, setAiDuration] = useState<number>(15);
   const [aiPrompt, setAiPrompt] = useState<string>('');
   const [aiGenError, setAiGenError] = useState<string | null>(null);
+
+  // Moondream Vision Image Understanding
+  const [showVisionModal, setShowVisionModal] = useState(false);
+  const [visionPhotoBase64, setVisionPhotoBase64] = useState<string | null>(null);
+  const [visionPhotoPreview, setVisionPhotoPreview] = useState<string | null>(null);
+  const [visionCategory, setVisionCategory] = useState<SkillCategory>('visual_explorer');
+  const [visionDifficulty, setVisionDifficulty] = useState<QuestDifficulty>('easy');
+  const [visionAnalyzing, setVisionAnalyzing] = useState(false);
+  const [visionError, setVisionError] = useState<string | null>(null);
+  const [visionResult, setVisionResult] = useState<{
+    description: string;
+    observable_details: string[];
+    perceived_category: SkillCategory;
+    uncertainty_note?: string;
+    generated_quest?: Quest;
+    source: string;
+  } | null>(null);
+
+  const handleSelectVisionPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setVisionError('Please select a valid image file (JPEG, PNG, or WEBP).');
+      return;
+    }
+
+    if (file.size > 4 * 1024 * 1024) {
+      setVisionError('Image size exceeds 4MB. Please choose a smaller photo.');
+      return;
+    }
+
+    setVisionError(null);
+    setVisionResult(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const dataUrl = event.target?.result as string;
+      setVisionPhotoPreview(dataUrl);
+
+      // Downscale if image is high-res to save memory and avoid payload limits
+      const img = new Image();
+      img.onload = () => {
+        const maxDim = 1024;
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w > h) {
+            h = Math.round((h * maxDim) / w);
+            w = maxDim;
+          } else {
+            w = Math.round((w * maxDim) / h);
+            h = maxDim;
+          }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const scaledBase64 = canvas.toDataURL('image/jpeg', 0.85);
+          setVisionPhotoBase64(scaledBase64);
+        } else {
+          setVisionPhotoBase64(dataUrl);
+        }
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleAnalyzePhoto = async () => {
+    if (!visionPhotoBase64) {
+      setVisionError('Please select or capture a photo first.');
+      return;
+    }
+
+    setVisionAnalyzing(true);
+    setVisionError(null);
+
+    try {
+      const result = await aiApi.generateQuestFromImage({
+        image_base64: visionPhotoBase64,
+        skill_category: visionCategory,
+        difficulty: visionDifficulty,
+      });
+
+      setVisionResult(result);
+      if (result.generated_quest) {
+        setQuests((prev) => [result.generated_quest!, ...prev]);
+      }
+    } catch (err: any) {
+      console.error('Vision analysis error:', err);
+      setVisionError(err.message || 'Image analysis failed. Check local Ollama Moondream connection.');
+    } finally {
+      setVisionAnalyzing(false);
+    }
+  };
 
   // Fetch Quests
   const loadQuests = useCallback(async () => {
@@ -209,7 +309,7 @@ export const QuestsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 space-y-6">
       {/* Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-parchment-200 dark:border-charcoal-800 pb-5">
         <div>
@@ -226,7 +326,18 @@ export const QuestsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Moondream Vision AI Button */}
+          <Button
+            variant="outline"
+            size="md"
+            onClick={() => setShowVisionModal(true)}
+            className="shadow-sm border-forest-600/40 text-forest-800 dark:text-parchment-100 hover:bg-forest-50 dark:hover:bg-forest-900/40"
+          >
+            <Camera className="w-4 h-4 mr-2 text-moss-600 dark:text-moss-400" />
+            <span>Vision AI (Moondream)</span>
+          </Button>
+
           {/* AI Generator Button */}
           <Button
             variant="secondary"
@@ -352,7 +463,7 @@ export const QuestsPage: React.FC = () => {
         <>
           {/* TAB 1: AVAILABLE QUESTS */}
           {activeTab === 'available' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
               {filteredQuests.map((quest) => (
                 <Card
                   key={quest.id}
@@ -416,7 +527,7 @@ export const QuestsPage: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                   {activeQuests.map((prog) => {
                     const questDetails = quests.find(q => q.id === prog.quest_id);
                     return (
@@ -733,6 +844,201 @@ export const QuestsPage: React.FC = () => {
             </Button>
           </div>
         </form>
+      </Modal>
+
+      {/* MODAL 4: MOONDREAM VISION AI */}
+      <Modal
+        isOpen={showVisionModal}
+        onClose={() => {
+          setShowVisionModal(false);
+          setVisionResult(null);
+          setVisionError(null);
+        }}
+        title="Moondream Vision AI — Outdoor Photo Understanding"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-charcoal-600 dark:text-parchment-300">
+            Upload or capture a field photo. TerraQuest uses the lightweight <strong>Moondream</strong> vision model to analyze physical textures, patterns, and natural vs built contours to craft an observation quest.
+          </p>
+
+          {visionError && (
+            <div className="p-3 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-xl text-xs border border-red-200 dark:border-red-900 flex items-center justify-between">
+              <span>{visionError}</span>
+              <Button variant="ghost" size="sm" onClick={() => setVisionError(null)} className="text-xs">
+                Dismiss
+              </Button>
+            </div>
+          )}
+
+          {/* Photo Uploader / Preview */}
+          {!visionPhotoPreview ? (
+            <label className="border-2 border-dashed border-parchment-300 dark:border-charcoal-700 hover:border-forest-600 dark:hover:border-moss-500 rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-parchment-100/40 dark:bg-charcoal-900/40">
+              <Camera className="w-8 h-8 text-forest-700 dark:text-moss-400 mb-2" />
+              <span className="text-xs font-semibold text-charcoal-800 dark:text-parchment-100">
+                Click to capture or select observation photo
+              </span>
+              <span className="text-[11px] text-charcoal-500 mt-1">
+                JPEG, PNG, or WEBP up to 4MB (automatically optimized for inference)
+              </span>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleSelectVisionPhoto}
+                className="hidden"
+              />
+            </label>
+          ) : (
+            <div className="space-y-3">
+              <div className="relative rounded-2xl overflow-hidden border border-parchment-200 dark:border-charcoal-800 max-h-56 bg-charcoal-950 flex items-center justify-center">
+                <img
+                  src={visionPhotoPreview}
+                  alt="Field Observation Preview"
+                  className="w-full h-full object-contain max-h-56"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVisionPhotoPreview(null);
+                    setVisionPhotoBase64(null);
+                    setVisionResult(null);
+                  }}
+                  className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 text-white rounded-full p-1 text-xs px-2 shadow-md transition-colors"
+                >
+                  Change Photo
+                </button>
+              </div>
+
+              {/* Discipline and Difficulty */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
+                    Discipline
+                  </label>
+                  <select
+                    value={visionCategory}
+                    onChange={(e) => setVisionCategory(e.target.value as SkillCategory)}
+                    className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
+                  >
+                    <option value="visual_explorer">Visual Explorer</option>
+                    <option value="nature_tracker">Nature Tracker</option>
+                    <option value="urban_explorer">Urban Explorer</option>
+                    <option value="sound_hunter">Sound Hunter</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
+                    Difficulty
+                  </label>
+                  <select
+                    value={visionDifficulty}
+                    onChange={(e) => setVisionDifficulty(e.target.value as QuestDifficulty)}
+                    className="w-full px-3 py-1.5 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
+                  >
+                    <option value="easy">Easy (50 XP)</option>
+                    <option value="medium">Medium (100 XP)</option>
+                    <option value="hard">Hard (200 XP)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowVisionModal(false);
+                    setVisionResult(null);
+                  }}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  loading={visionAnalyzing}
+                  onClick={handleAnalyzePhoto}
+                >
+                  <Sparkles className="w-3.5 h-3.5 mr-1 text-brass-400" />
+                  Analyze Photo with Moondream
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Analysis Results Display */}
+          {visionResult && (
+            <div className="mt-4 p-4 rounded-2xl bg-forest-50/50 dark:bg-forest-950/40 border border-forest-200 dark:border-forest-900/60 space-y-3 animate-in fade-in">
+              <div className="flex items-center justify-between">
+                <Badge variant="moss" size="sm">
+                  Model: {visionResult.source === 'moondream' ? 'Moondream Vision' : 'Deterministic Fallback'}
+                </Badge>
+                <Badge variant="outline" size="sm">
+                  Category: {visionResult.perceived_category.replace('_', ' ')}
+                </Badge>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-forest-800 dark:text-moss-400 block mb-1">
+                  Observable Field Details
+                </span>
+                <p className="text-xs text-charcoal-800 dark:text-parchment-100 leading-relaxed">
+                  "{visionResult.description}"
+                </p>
+              </div>
+
+              {visionResult.observable_details?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {visionResult.observable_details.map((detail, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-0.5 rounded-lg bg-white dark:bg-charcoal-800 border border-parchment-200 dark:border-charcoal-700 text-[11px] text-charcoal-700 dark:text-parchment-200"
+                    >
+                      • {detail}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {visionResult.uncertainty_note && (
+                <p className="text-[10px] text-charcoal-500 italic">
+                  Note: {visionResult.uncertainty_note}
+                </p>
+              )}
+
+              {visionResult.generated_quest && (
+                <div className="pt-2 border-t border-forest-200 dark:border-forest-900/60">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-brass-700 dark:text-brass-400 block mb-1">
+                    Generated Observation Quest
+                  </span>
+                  <div className="p-3 bg-white dark:bg-charcoal-900 rounded-xl border border-parchment-200 dark:border-charcoal-800 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="font-serif font-bold text-sm text-charcoal-900 dark:text-parchment-100">
+                        {visionResult.generated_quest.title}
+                      </h4>
+                      <p className="text-xs text-charcoal-600 dark:text-parchment-300 line-clamp-1">
+                        {visionResult.generated_quest.description}
+                      </p>
+                    </div>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedQuest(visionResult.generated_quest!);
+                        setShowVisionModal(false);
+                      }}
+                    >
+                      Start Quest
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </Modal>
     </div>
   );

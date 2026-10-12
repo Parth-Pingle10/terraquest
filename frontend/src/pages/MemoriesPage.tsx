@@ -269,7 +269,7 @@ export const MemoriesPage: React.FC = () => {
   });
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 space-y-6">
       {/* Top Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-parchment-200 dark:border-charcoal-800 pb-5">
         <div>
@@ -376,7 +376,7 @@ export const MemoriesPage: React.FC = () => {
           </Button>
         </div>
       ) : viewMode === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
           {filteredDiscoveries.map((disc) => {
             const photoUrl = disc.photo_blob_id ? photoUrls[disc.photo_blob_id] : disc.photo_url;
             return (

@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List, Optional, Union
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -38,10 +38,25 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    # Ollama Local AI
+    # llama.cpp Local GGUF Inference
+    LLAMA_CPP_BASE_URL: str = "http://127.0.0.1:8080"
+    LLAMA_CPP_MODEL_PATH: str = "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
+    LLAMA_CPP_TIMEOUT_SECONDS: float = 15.0
+    LLAMA_CPP_CONTEXT_SIZE: int = 2048
+    LLAMA_CPP_MAX_TOKENS: int = 512
+
+    # Ollama Local AI (Alternative local inference)
     OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
     OLLAMA_MODEL: str = "qwen2.5:0.5b"
+    OLLAMA_VISION_MODEL: str = "moondream:latest"
     OLLAMA_TIMEOUT_SECONDS: float = 10.0
+    OLLAMA_VISION_TIMEOUT_SECONDS: float = 25.0
+
+    # Vision Model Toggle (disabled by default for production/low-memory stability)
+    ENABLE_VISION_MODEL: bool = False
+
+    # Frontend Single-Service Serving
+    FRONTEND_DIST_DIR: Optional[str] = None
 
     # Exploration & Map
     DEFAULT_REGION_GRID_CELLS: int = 100

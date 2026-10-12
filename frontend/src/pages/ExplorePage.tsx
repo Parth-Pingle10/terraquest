@@ -115,7 +115,7 @@ export const ExplorePage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8 max-w-5xl mx-auto">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 space-y-6 sm:space-y-8">
       {/* Explorer Greeting Banner */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-forest-900 via-forest-800 to-forest-950 text-parchment-50 p-6 sm:p-8 shadow-elevated border border-forest-700/50">
         <div className="absolute top-0 right-0 w-96 h-96 bg-moss-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />

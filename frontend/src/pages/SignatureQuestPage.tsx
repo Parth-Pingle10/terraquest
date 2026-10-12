@@ -204,7 +204,7 @@ export const SignatureQuestPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto py-4 sm:py-8 px-2 sm:px-4">
+    <div className="max-w-3xl mx-auto py-6 sm:py-10 px-4 sm:px-6">
       {/* Progress Indicator */}
       <div className="mb-6 flex items-center justify-between text-xs font-mono text-forest-700/70 dark:text-moss-400">
         <span className="flex items-center gap-1.5">

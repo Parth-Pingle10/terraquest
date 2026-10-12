@@ -283,7 +283,7 @@ export const SkillsPage: React.FC = () => {
   const selectedBranch = skillTree?.branches.find((b) => b.key === selectedBranchKey) || skillTree?.branches[0];
 
   return (
-    <div className="max-w-6xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 space-y-6">
       {/* Header Banner */}
       <div className="border-b border-parchment-200 dark:border-charcoal-800 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -337,7 +337,7 @@ export const SkillsPage: React.FC = () => {
       ) : skillTree ? (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* 4 Skill Branches Selector (Left/Top) */}
-          <div className="lg:col-span-4 space-y-3">
+          <div className="lg:col-span-4 xl:col-span-3 space-y-3">
             <h2 className="text-xs font-mono uppercase tracking-widest text-charcoal-500 dark:text-parchment-400 font-bold mb-2">
               Perceptual Disciplines
             </h2>
@@ -390,7 +390,7 @@ export const SkillsPage: React.FC = () => {
           </div>
 
           {/* Branch Details & Node Graph (Right) */}
-          <div className="lg:col-span-8 space-y-5">
+          <div className="lg:col-span-8 xl:col-span-9 space-y-5">
             {selectedBranch && (
               <Card className="border border-parchment-200 dark:border-charcoal-800 p-6 space-y-6">
                 <div>
@@ -414,7 +414,7 @@ export const SkillsPage: React.FC = () => {
                     Perceptual Nodes
                   </h3>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                     {(selectedBranch.nodes || []).map((node, idx) => {
                       const isNodeSelected = selectedNode?.id === node.id;
                       return (

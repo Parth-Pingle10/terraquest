@@ -187,7 +187,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+    <div className="w-full px-4 sm:px-6 lg:px-8 xl:px-10 py-6 sm:py-8 space-y-6">
       {/* Top Banner */}
       <div className="border-b border-parchment-200 dark:border-charcoal-800 pb-5">
         <span className="text-xs font-mono uppercase tracking-widest text-forest-700 dark:text-moss-400 font-bold">
@@ -244,114 +244,141 @@ export const SettingsPage: React.FC = () => {
         </Card>
       </div>
 
-      {/* SECTION 1: Profile & Preferences */}
-      <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-parchment-200 dark:border-charcoal-800 pb-3">
-          <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-forest-700 dark:text-moss-400" />
-            <h2 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
-              Explorer Identity & Preferences
-            </h2>
-          </div>
-          <Badge variant={isAuthenticated ? 'success' : 'outline'} size="sm">
-            {isAuthenticated ? 'Authenticated Account' : 'Guest Mode'}
-          </Badge>
-        </div>
-
-        <form onSubmit={handleSaveProfile} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
-              Explorer Display Name
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full sm:w-80 px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
-                Preferred Quest Duration
-              </label>
-              <select
-                value={prefDuration}
-                onChange={(e) => setPrefDuration(Number(e.target.value))}
-                className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
-              >
-                <option value={5}>5 minutes</option>
-                <option value={10}>10 minutes</option>
-                <option value={15}>15 minutes</option>
-                <option value={30}>30 minutes</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
-                Preferred Difficulty
-              </label>
-              <select
-                value={prefDifficulty}
-                onChange={(e) => setPrefDifficulty(e.target.value as any)}
-                className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
-              >
-                <option value="easy">Easy (Mindful Stroll)</option>
-                <option value="medium">Medium (Detailed Observation)</option>
-                <option value="hard">Hard (Rare Tracking)</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 pt-2">
-            <Button type="submit" variant="primary" size="sm">
-              Save Preferences
-            </Button>
-            {savedNotice && (
-              <span className="text-xs text-moss-600 dark:text-moss-400 font-semibold flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" /> Saved!
-              </span>
-            )}
-          </div>
-        </form>
-      </Card>
-
-      {/* SECTION 2: AI Status & Engine */}
-      <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 space-y-4">
-        <div className="flex items-center justify-between border-b border-parchment-200 dark:border-charcoal-800 pb-3">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-brass-500" />
-            <h2 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
-              Local AI Engine Status
-            </h2>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={refreshAIStatus}
-            className="text-xs"
-          >
-            <RefreshCw className="w-3 h-3 mr-1" /> Re-check
-          </Button>
-        </div>
-
-        <div className="flex items-center justify-between p-3.5 bg-parchment-100/60 dark:bg-charcoal-800/60 rounded-xl">
-          <div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* SECTION 1: Profile & Preferences */}
+        <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 space-y-4">
+          <div className="flex items-center justify-between border-b border-parchment-200 dark:border-charcoal-800 pb-3">
             <div className="flex items-center gap-2">
-              <span className="font-serif font-bold text-sm text-charcoal-900 dark:text-parchment-100">
-                Ollama Local LLM
-              </span>
-              <Badge variant={aiStatus?.available ? 'success' : 'outline'} size="sm">
-                {aiStatus?.available ? 'Online & Ready' : 'Deterministic Fallback Active'}
-              </Badge>
+              <User className="w-4 h-4 text-forest-700 dark:text-moss-400" />
+              <h2 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
+                Explorer Identity & Preferences
+              </h2>
             </div>
-            <p className="text-xs text-charcoal-500 dark:text-parchment-400 mt-1">
-              Model: {aiStatus?.model || 'Fallback Catalog'} • Provider: {aiStatus?.provider || 'offline'}
-            </p>
+            <Badge variant={isAuthenticated ? 'success' : 'outline'} size="sm">
+              {isAuthenticated ? 'Authenticated Account' : 'Guest Mode'}
+            </Badge>
           </div>
+
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
+                Explorer Display Name
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                className="w-full sm:w-80 px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
+                  Preferred Quest Duration
+                </label>
+                <select
+                  value={prefDuration}
+                  onChange={(e) => setPrefDuration(Number(e.target.value))}
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
+                >
+                  <option value={5}>5 minutes</option>
+                  <option value={10}>10 minutes</option>
+                  <option value={15}>15 minutes</option>
+                  <option value={30}>30 minutes</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-charcoal-700 dark:text-parchment-300 mb-1">
+                  Preferred Difficulty
+                </label>
+                <select
+                  value={prefDifficulty}
+                  onChange={(e) => setPrefDifficulty(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl text-xs bg-white dark:bg-charcoal-800 border border-parchment-300 dark:border-charcoal-700 text-charcoal-900 dark:text-parchment-100"
+                >
+                  <option value="easy">Easy (Mindful Stroll)</option>
+                  <option value="medium">Medium (Detailed Observation)</option>
+                  <option value="hard">Hard (Rare Tracking)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-2">
+              <Button type="submit" variant="primary" size="sm">
+                Save Preferences
+              </Button>
+              {savedNotice && (
+                <span className="text-xs text-moss-600 dark:text-moss-400 font-semibold flex items-center gap-1">
+                  <Check className="w-3.5 h-3.5" /> Saved!
+                </span>
+              )}
+            </div>
+          </form>
+        </Card>
+
+        {/* SECTION 2: AI Status & Engine */}
+        <div className="space-y-6">
+          <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 space-y-4">
+            <div className="flex items-center justify-between border-b border-parchment-200 dark:border-charcoal-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-brass-500" />
+                <h2 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
+                  Local AI Engine Status
+                </h2>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={refreshAIStatus}
+                className="text-xs"
+              >
+                <RefreshCw className="w-3 h-3 mr-1" /> Re-check
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 bg-parchment-100/60 dark:bg-charcoal-800/60 rounded-xl">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-serif font-bold text-sm text-charcoal-900 dark:text-parchment-100">
+                    Ollama Local LLM
+                  </span>
+                  <Badge variant={aiStatus?.available ? 'success' : 'outline'} size="sm">
+                    {aiStatus?.available ? 'Online & Ready' : 'Deterministic Fallback Active'}
+                  </Badge>
+                </div>
+                <p className="text-xs text-charcoal-500 dark:text-parchment-400 mt-1">
+                  Model: {aiStatus?.model || 'Fallback Catalog'} • Provider: {aiStatus?.provider || 'offline'}
+                </p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Account Session if Authenticated */}
+          {isAuthenticated && (
+            <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 flex items-center justify-between">
+              <div>
+                <h3 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
+                  Account Session
+                </h3>
+                <p className="text-xs text-charcoal-500">
+                  Logged in as {user?.username} ({user?.display_name})
+                </p>
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="text-red-600 border-red-200 hover:bg-red-50"
+              >
+                <LogOut className="w-3.5 h-3.5 mr-1" /> Log Out
+              </Button>
+            </Card>
+          )}
         </div>
-      </Card>
+      </div>
 
       {/* SECTION 3: Storage & Local-First Records */}
       <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 space-y-4">
@@ -416,29 +443,6 @@ export const SettingsPage: React.FC = () => {
           </Button>
         </div>
       </Card>
-
-      {/* SECTION 4: Account Actions */}
-      {isAuthenticated && (
-        <Card className="p-6 border border-parchment-200 dark:border-charcoal-800 flex items-center justify-between">
-          <div>
-            <h3 className="font-serif font-bold text-base text-charcoal-900 dark:text-parchment-100">
-              Account Session
-            </h3>
-            <p className="text-xs text-charcoal-500">
-              Logged in as {user?.username} ({user?.display_name})
-            </p>
-          </div>
-
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={logout}
-            className="text-red-600 border-red-200 hover:bg-red-50"
-          >
-            <LogOut className="w-3.5 h-3.5 mr-1" /> Log Out
-          </Button>
-        </Card>
-      )}
     </div>
   );
 };

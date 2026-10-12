@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
+from pathlib import Path
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.router import api_v1_router
 from app.api.v1.health import router as health_root_router
@@ -86,6 +88,45 @@ def create_app() -> FastAPI:
 
     # Versioned API routes
     app.include_router(api_v1_router)
+
+    # Built frontend static file & SPA fallback serving (Render single-container deployment)
+    dist_path: Optional[Path] = None
+    if settings.FRONTEND_DIST_DIR:
+        candidate = Path(settings.FRONTEND_DIST_DIR).resolve()
+        if candidate.is_dir() and (candidate / "index.html").is_file():
+            dist_path = candidate
+    else:
+        for p in [
+            Path("/app/frontend/dist"),
+            Path("/app/dist"),
+            Path(__file__).parent.parent.parent / "frontend" / "dist",
+        ]:
+            if p.is_dir() and (p / "index.html").is_file():
+                dist_path = p.resolve()
+                break
+
+    if dist_path:
+        assets_dir = dist_path / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa_frontend(full_path: str):
+            # Guard API, health, docs, and schema routes from SPA catch-all
+            if (
+                full_path.startswith("api/")
+                or full_path == "api"
+                or full_path.startswith("health")
+                or full_path in ("docs", "redoc", "openapi.json")
+            ):
+                return JSONResponse(status_code=404, content={"detail": "Not Found"})
+
+            target_file = dist_path / full_path
+            if full_path and target_file.is_file():
+                return FileResponse(target_file)
+            return FileResponse(dist_path / "index.html")
+
+        logger.info("Serving built frontend SPA from %s", str(dist_path))
 
     return app
 

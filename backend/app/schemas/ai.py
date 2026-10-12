@@ -8,6 +8,25 @@ class AIStatusResponse(BaseModel):
     model_available: bool
     active_provider: str
     configured_model: str
+    vision_model_available: Optional[bool] = False
+    configured_vision_model: Optional[str] = "moondream:latest"
+
+
+class ImageAnalysisRequest(BaseModel):
+    image_base64: str = Field(min_length=10, description="Base64 encoded image string (JPEG/PNG/WEBP)")
+    prompt: Optional[str] = Field(default=None, max_length=1000)
+    skill_category: Optional[SkillCategory] = None
+    difficulty: Optional[QuestDifficulty] = None
+
+
+class ImageAnalysisResponse(BaseModel):
+    description: str
+    observable_details: List[str] = Field(default_factory=list)
+    perceived_category: SkillCategory
+    uncertainty_note: Optional[str] = None
+    generated_quest: Optional[dict] = None
+    source: str = Field(description="'moondream' or 'deterministic_fallback'")
+
 
 
 class QuestGenerateRequest(BaseModel):

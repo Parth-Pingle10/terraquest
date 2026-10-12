@@ -324,3 +324,55 @@ class DeterministicQuestProvider(AIProvider):
             "suggested_skill": SkillCategory.VISUAL_EXPLORER,
             "source": "deterministic",
         }
+
+    async def analyze_image(
+        self,
+        image_base64: str,
+        prompt: Optional[str] = None,
+        skill_category: Optional[SkillCategory] = None,
+    ) -> Dict[str, Any]:
+        """
+        Deterministic image analysis fallback when local vision model is unavailable.
+        Provides grounded observational cues without claiming exact species or fabricating model output.
+        """
+        cat = skill_category or SkillCategory.VISUAL_EXPLORER
+        return {
+            "description": (
+                "Field photograph captured for perceptual study. The composition displays subtle surface textures, "
+                "interplay of daylight, and organic contours characteristic of the observation environment. "
+                "Exact biological species or masonry foundry marks are unconfirmed in offline fallback mode."
+            ),
+            "observable_details": [
+                "Surface texture and tactile roughness",
+                "Light falloff and shadow gradients",
+                "Contrast between natural and artificial geometric contours",
+            ],
+            "perceived_category": cat,
+            "uncertainty_note": (
+                "Deterministic fallback active. Start local Ollama with Moondream model for live neural vision inference."
+            ),
+            "source": "deterministic_fallback",
+        }
+
+    async def generate_quest_from_image(
+        self,
+        image_base64: str,
+        skill_category: Optional[SkillCategory] = None,
+        difficulty: Optional[QuestDifficulty] = None,
+    ) -> Dict[str, Any]:
+        analysis = await self.analyze_image(image_base64, skill_category=skill_category)
+        diff = difficulty or QuestDifficulty.BEGINNER
+        cat = skill_category or analysis["perceived_category"]
+
+        quest = await self.generate_quest(
+            skill_category=cat,
+            difficulty=diff,
+            duration_minutes=15,
+            user_interests=["visual patterns", "surface textures"],
+        )
+        return {
+            "analysis": analysis,
+            "quest": quest,
+            "source": "deterministic_fallback",
+        }
+

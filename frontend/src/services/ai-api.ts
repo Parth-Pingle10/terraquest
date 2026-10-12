@@ -68,4 +68,39 @@ export const aiApi = {
       body: JSON.stringify(payload),
     });
   },
+
+  analyzeImage: (payload: {
+    image_base64: string;
+    prompt?: string;
+    skill_category?: string;
+  }) => {
+    return apiClient<{
+      description: string;
+      observable_details: string[];
+      perceived_category: SkillCategory;
+      uncertainty_note?: string;
+      source: string;
+    }>('/api/v1/ai/vision/analyze', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
+
+  generateQuestFromImage: (payload: {
+    image_base64: string;
+    skill_category?: string;
+    difficulty?: string;
+  }) => {
+    return apiClient<{
+      description: string;
+      observable_details: string[];
+      perceived_category: SkillCategory;
+      uncertainty_note?: string;
+      generated_quest?: Quest;
+      source: string;
+    }>('/api/v1/ai/vision/quest-from-image', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  },
 };

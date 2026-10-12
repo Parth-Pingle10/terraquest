@@ -41,3 +41,23 @@ class AIProvider(ABC):
     ) -> Dict[str, Any]:
         """Generate a follow-up challenge."""
         pass
+
+    @abstractmethod
+    async def analyze_image(
+        self,
+        image_base64: str,
+        prompt: Optional[str] = None,
+        skill_category: Optional[SkillCategory] = None,
+    ) -> Dict[str, Any]:
+        """Analyze an image using lightweight vision understanding (Moondream)."""
+        pass
+
+    @abstractmethod
+    async def generate_quest_from_image(
+        self,
+        image_base64: str,
+        skill_category: Optional[SkillCategory] = None,
+        difficulty: Optional[QuestDifficulty] = None,
+    ) -> Dict[str, Any]:
+        """Generate an observation quest contextualized by an analyzed image."""
+        pass

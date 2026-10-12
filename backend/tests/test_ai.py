@@ -72,3 +72,42 @@ async def test_ai_reflection_endpoint(client: AsyncClient):
     data = res.json()["data"]
     assert "reflection_text" in data
     assert data["source"] in ("ollama", "deterministic")
+
+
+@pytest.mark.asyncio
+async def test_ai_vision_analyze_endpoint(client: AsyncClient):
+    sample_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    res = await client.post(
+        "/api/v1/ai/vision/analyze",
+        json={
+            "image_base64": sample_b64,
+            "skill_category": "nature_tracker",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert "description" in data
+    assert "observable_details" in data
+    assert "perceived_category" in data
+    assert data["source"] in ("moondream", "deterministic_fallback")
+
+
+@pytest.mark.asyncio
+async def test_ai_vision_quest_from_image_endpoint(client: AsyncClient):
+    sample_b64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+    res = await client.post(
+        "/api/v1/ai/vision/quest-from-image",
+        json={
+            "image_base64": sample_b64,
+            "skill_category": "visual_explorer",
+            "difficulty": "beginner",
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()["data"]
+    assert "description" in data
+    assert "generated_quest" in data
+    assert data["generated_quest"] is not None
+    assert "title" in data["generated_quest"]
+    assert "instructions" in data["generated_quest"]
+

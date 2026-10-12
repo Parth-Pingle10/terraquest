@@ -9,7 +9,7 @@ export const Header: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-30 bg-parchment-50/90 dark:bg-charcoal-900/90 backdrop-blur-md border-b border-parchment-200 dark:border-charcoal-800 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+      <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo / Brand */}
         <Link to="/" className="flex items-center gap-2.5 group">
           <div className="w-9 h-9 rounded-xl bg-forest-800 dark:bg-forest-700 flex items-center justify-center text-parchment-50 shadow-field group-hover:scale-105 transition-transform">
@@ -33,8 +33,8 @@ export const Header: React.FC = () => {
             title={aiStatus?.ollama_reachable ? `Local Model: ${aiStatus.configured_model}` : 'Offline Deterministic Rules'}
           >
             <Cpu className="w-3.5 h-3.5 text-moss-600 dark:text-moss-400" />
-            <span className="truncate max-w-[120px]">
-              {aiStatus?.active_provider === 'ollama' ? 'Ollama: Qwen' : 'Local AI'}
+            <span className="truncate max-w-[140px]">
+              {aiStatus?.active_provider === 'ollama' ? `Ollama: ${aiStatus.configured_model || 'Qwen'}` : 'Local AI Rules'}
             </span>
           </div>
 
@@ -44,12 +44,12 @@ export const Header: React.FC = () => {
             title={backendOnline ? 'Connected to local FastAPI backend' : 'Backend offline - Local mode active'}
           >
             {backendOnline ? (
-              <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400">
+              <span className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span className="hidden md:inline">Online</span>
               </span>
             ) : (
-              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+              <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400 font-medium">
                 <WifiOff className="w-3.5 h-3.5" />
                 <span className="hidden md:inline">Offline</span>
               </span>
@@ -72,7 +72,7 @@ export const Header: React.FC = () => {
             <Link to="/settings">
               <Button variant="secondary" size="sm" className="gap-2 font-medium">
                 <UserIcon className="w-3.5 h-3.5 text-forest-700 dark:text-moss-400" />
-                <span className="max-w-[100px] truncate">{user.display_name || user.username}</span>
+                <span className="max-w-[120px] truncate">{user.display_name || user.username}</span>
               </Button>
             </Link>
           ) : (
