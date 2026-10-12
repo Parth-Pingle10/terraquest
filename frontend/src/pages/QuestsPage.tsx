@@ -177,7 +177,7 @@ export const QuestsPage: React.FC = () => {
     try {
       const allQuests = await questsApi.listQuests();
       const customQuests = storage.getGuestCustomQuests();
-      const combined = [...customQuests, ...allQuests.filter(q => !customQuests.some(cq => cq.id === q.id))];
+      const combined = [...customQuests, ...allQuests.filter(q => !customQuests.some((cq: Quest) => cq.id === q.id))];
       setQuests(combined);
 
       if (isAuthenticated) {

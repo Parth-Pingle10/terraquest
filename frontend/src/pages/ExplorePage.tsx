@@ -94,9 +94,9 @@ export const ExplorePage: React.FC = () => {
         // Load guest data
         const guestSkills = storage.getGuestSkills();
         setSkills(guestSkills);
-        setTotalXp(guestSkills.reduce((sum, b) => sum + b.xp, 0));
+        setTotalXp(guestSkills.reduce((sum: number, b: SkillBranch) => sum + b.xp, 0));
         setRecentDiscoveries(storage.getGuestDiscoveries().slice(0, 4));
-        setCompletedCount(guestSkills.reduce((sum, b) => sum + b.completed_quest_count, 0));
+        setCompletedCount(guestSkills.reduce((sum: number, b: SkillBranch) => sum + b.completed_quest_count, 0));
       }
     } finally {
       setIsLoading(false);
