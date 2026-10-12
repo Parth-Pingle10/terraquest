@@ -156,37 +156,78 @@ docker compose --profile ai up --build
 
 ---
 
-## 6. Render Deployment Steps
+## 6. Render Deployment Instructions (Backend-Only)
 
-### Option A: Deploy via Render Blueprint (`render.yaml`)
-1. Push repository to GitHub.
-2. In the [Render Dashboard](https://dashboard.render.com/), click **New +** -> **Blueprint**.
-3. Select your repository. Render automatically reads `render.yaml`.
-4. Click **Apply**. Render will automatically build the multi-stage Dockerfile and deploy your web service.
+### Overview
+This deployment runs strictly the FastAPI backend as a standalone service. No Node.js build, no frontend code, and no external database dependencies are involved.
 
 ---
 
-### Option B: Deploy Manually as a Web Service
-1. In Render Dashboard, click **New +** -> **Web Service**.
-2. Connect your GitHub repository.
-3. Configure settings:
-   - **Environment**: `Docker`
-   - **Dockerfile Path**: `./Dockerfile`
-   - **Docker Context**: `.`
-   - **Instance Type**: `Free`
+### Step-by-Step Render Web Service Configuration
+
+1. In the [Render Dashboard](https://dashboard.render.com/), click **New +** -> **Web Service**.
+2. Connect your GitHub repository:
+   - **Repository**: `https://github.com/<your-username>/terraquest`
+   - **Branch**: `main` (or your active feature branch)
+
+3. Configure Service Settings:
+   - **Name**: `terraquest-backend`
+   - **Region**: Nearest to your users (e.g., Frankfurt / Oregon / Ohio / Singapore)
+   - **Language / Runtime**: **`Docker`**
+   - **Root Directory**: Leave blank (default `.`)
+   - **Dockerfile Path**: `./backend/Dockerfile` *(or `./Dockerfile`)*
+   - **Docker Context**: `.` *(or `./backend` if using `backend/Dockerfile` as root directory)*
+   - **Instance Type**: **`Free`** (512 MB RAM, 0.1 CPU)
    - **Health Check Path**: `/health`
+
 4. Add Environment Variables:
-   - `APP_ENV`: `production`
-   - `APP_DEBUG`: `false`
-   - `OLLAMA_MODEL`: `moondream:v2`
-   - `OLLAMA_TIMEOUT_SECONDS`: `60`
-   - `ENABLE_VISION_MODEL`: `false`
-   - `JWT_SECRET_KEY`: *(Generate 32+ character random secret)*
-   - `SHARE_TOKEN_SALT`: *(Generate 32+ character random secret)*
-   - `CORS_ORIGINS`: `*`
-5. Click **Create Web Service**.
-6. When deployment finishes:
-   - Frontend SPA loads immediately from `/`
-   - API responds on `/api/v1/`
-   - Health probes succeed on `/health` and `/ready`
-   - Zero database configuration required!
+   | Key | Value | Description |
+   |---|---|---|
+   | `APP_ENV` | `production` | Production mode |
+   | `APP_DEBUG` | `false` | Disables debug stack traces |
+   | `HOST` | `0.0.0.0` | Container bind host |
+   | `PORT` | *(Leave empty - Render assigns automatically)* | Render sets `$PORT` dynamically |
+   | `CORS_ORIGINS` | `*` | Allows cross-origin requests from frontend (can restrict once frontend URL is known) |
+   | `ENABLE_VISION_MODEL` | `false` | Keeps deterministic AI fallback active on Free tier (safeguards 512 MB RAM limit) |
+   | `OLLAMA_MODEL` | `moondream:v2` | Model identifier |
+   | `OLLAMA_TIMEOUT_SECONDS` | `60` | Request timeout for AI generation |
+   | `JWT_SECRET_KEY` | *(Click "Generate" or provide 32+ char secret)* | Auth token signing |
+   | `SHARE_TOKEN_SALT` | *(Click "Generate" or provide 32+ char secret)* | Hashing for public share tokens |
+
+5. **Deploy**:
+   Click **Create Web Service**.
+   Render will pull the Docker image, run `pip install -r requirements.txt`, create `appuser`, and start Uvicorn.
+   - Zero Node / TypeScript errors because frontend build is never executed.
+   - Starts in ~15-30 seconds.
+   - Memory usage: ~65 MB out of 512 MB.
+
+---
+
+### Model Deployment & Memory Footprint
+
+- **Free Tier (512 MB RAM)**:
+  - `moondream:v2` requires ~1.4 GB to 1.8 GB RAM during inference. Running Ollama with Moondream on the Free tier will immediately cause an `Out of Memory (OOM) Kill (Exit Code 137)`.
+  - TerraQuest addresses this safely: `ENABLE_VISION_MODEL=false` runs the deterministic fallback engine, which provides structured observation prompts, authentic texture recognition hints, and instant quest generation with 0 MB model RAM overhead.
+
+- **Enabling Moondream on Render (Paid / Private Service)**:
+  If you wish to run live neural inference on Render:
+  1. Create a second Web Service or Private Service running the official `ollama/ollama` Docker image with at least **2 GB to 4 GB RAM** (e.g., Render Starter/Standard tier).
+  2. Attach a persistent disk (`/root/.ollama`) so the 829 MB `moondream:v2` model is not redownloaded on container restarts.
+  3. Preload the model via container start command: `sh -c "ollama serve & sleep 5 && ollama pull moondream:v2 && wait"`.
+  4. In the `terraquest-backend` service, add the private network URL:
+     - `OLLAMA_BASE_URL`: `http://ollama-service-name:11434`
+     - `ENABLE_VISION_MODEL`: `true`
+  > **Note**: Do not use `http://localhost:11434` on Render to reach another container. Render private services communicate over their internal service domain name.
+
+- **llama.cpp Note**:
+  If compiling or using `llama.cpp` instead of Ollama, `moondream2` requires the specific `moondream2-text-model-f16.gguf` and `moondream2-mmproj-f16.gguf` projector files; you cannot pass an Ollama tag (`moondream:v2`) directly to llama.cpp binaries.
+
+---
+
+### Verification After Render Deployment
+Once your Render backend URL is active (e.g., `https://terraquest-backend.onrender.com`):
+1. Test Health: `curl https://terraquest-backend.onrender.com/health` -> `{"status":"ok"}`
+2. Test Readiness: `curl https://terraquest-backend.onrender.com/ready` -> `{"status":"ready","database":"connected","persistence":"in_memory_and_client_localstorage"}`
+3. Test OpenAPI Docs: Visit `https://terraquest-backend.onrender.com/docs` in your browser.
+4. Test AI Status: `curl https://terraquest-backend.onrender.com/api/v1/ai/status` -> verifies provider status.
+
