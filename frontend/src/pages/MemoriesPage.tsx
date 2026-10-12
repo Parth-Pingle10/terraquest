@@ -87,9 +87,13 @@ export const MemoriesPage: React.FC = () => {
         }
         setPhotoUrls(urls);
       } else {
-        // Guest mode - IndexedDB
-        const localItems = await idb.getAllDiscoveries();
+        // Guest mode - IndexedDB with localStorage fallback
+        let localItems = await idb.getAllDiscoveries();
         const urls: Record<string, string> = {};
+
+        if (!localItems || localItems.length === 0) {
+          localItems = storage.getGuestDiscoveries();
+        }
 
         const mapped: Discovery[] = await Promise.all(
           localItems.map(async (ld: any) => {
@@ -214,6 +218,7 @@ export const MemoriesPage: React.FC = () => {
           created_at: localDisc.created_at,
           visibility: 'private'
         };
+        storage.saveGuestDiscovery(mapped);
         setDiscoveries(prev => [mapped, ...prev]);
       }
 
@@ -243,6 +248,7 @@ export const MemoriesPage: React.FC = () => {
         await discoveriesApi.deleteDiscovery(discovery.id);
       } else {
         await idb.deleteDiscovery(discovery.id);
+        storage.deleteGuestDiscovery(discovery.id);
       }
       if (discovery.photo_blob_id) {
         await idb.deletePhoto(discovery.photo_blob_id);

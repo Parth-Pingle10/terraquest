@@ -16,26 +16,48 @@ from app.core.exceptions import (
     terraquest_exception_handler,
 )
 from app.core.logging import logger
-from app.db.indexes import create_indexes
-from app.db.mongo import mongo_manager
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Application lifespan: initialize database and indexes on startup; disconnect on shutdown."""
-    logger.info("Starting %s v%s in %s environment...", settings.APP_NAME, settings.APP_VERSION, settings.APP_ENV)
+    """Application lifespan: startup and graceful shutdown."""
+    logger.info(
+        "Starting %s v%s in %s environment (In-Memory / Local-First mode)...",
+        settings.APP_NAME,
+        settings.APP_VERSION,
+        settings.APP_ENV,
+    )
+    # Seed in-memory starter quests if empty
     try:
-        await mongo_manager.connect()
-        db = mongo_manager.get_database()
-        await create_indexes(db)
-        logger.info("Application initialized successfully.")
+        from app.ai.deterministic_provider import CURATED_DETERMINISTIC_QUESTS
+        from app.db.memory_store import get_db
+        from app.models.quest import QuestModel
+        from app.repositories.quest_repository import QuestRepository
+
+        db = get_db()
+        quest_repo = QuestRepository(db)
+        if await quest_repo.count() == 0:
+            for template in CURATED_DETERMINISTIC_QUESTS:
+                quest_model = QuestModel(
+                    title=template["title"],
+                    description=template["description"],
+                    skill_category=template["skill_category"],
+                    duration_minutes=template["duration_minutes"],
+                    difficulty=template["difficulty"],
+                    instructions=template["instructions"],
+                    reflection_questions=template["reflection_questions"],
+                    completion_criteria=template["completion_criteria"],
+                    optional_follow_up_prompt=template.get("optional_follow_up_prompt"),
+                    generation_source="seed",
+                    active=True,
+                )
+                await quest_repo.create(quest_model)
+            logger.info("Auto-seeded %d curated starter quests into in-memory store.", len(CURATED_DETERMINISTIC_QUESTS))
     except Exception as e:
-        logger.warning("Notice during startup database initialization: %s", str(e))
+        logger.warning("Notice during in-memory startup initialization: %s", str(e))
 
     yield
-
     logger.info("Shutting down %s...", settings.APP_NAME)
-    await mongo_manager.disconnect()
 
 
 def create_app() -> FastAPI:

@@ -159,6 +159,7 @@ export const QuestsPage: React.FC = () => {
 
       setVisionResult(result);
       if (result.generated_quest) {
+        storage.saveGuestCustomQuest(result.generated_quest);
         setQuests((prev) => [result.generated_quest!, ...prev]);
       }
     } catch (err: any) {
@@ -175,12 +176,17 @@ export const QuestsPage: React.FC = () => {
     setError(null);
     try {
       const allQuests = await questsApi.listQuests();
-      setQuests(allQuests);
+      const customQuests = storage.getGuestCustomQuests();
+      const combined = [...customQuests, ...allQuests.filter(q => !customQuests.some(cq => cq.id === q.id))];
+      setQuests(combined);
 
       if (isAuthenticated) {
         const userProgress = await questsApi.getUserQuests();
         setActiveQuests(userProgress.filter(p => p.status === 'in_progress'));
         setCompletedQuests(userProgress.filter(p => p.status === 'completed'));
+      } else {
+        setActiveQuests(storage.getGuestActiveQuests());
+        setCompletedQuests(storage.getGuestCompletedQuests());
       }
     } catch (err: any) {
       console.error('Failed to load quests:', err);
@@ -238,10 +244,10 @@ export const QuestsPage: React.FC = () => {
         setActiveTab('active');
         setSelectedQuest(null);
       } else {
-        // Guest mode
+        storage.startGuestQuest(quest.id);
+        await loadQuests();
         setActiveTab('active');
         setSelectedQuest(null);
-        alert(`Expedition "${quest.title}" started in local guest journal!`);
       }
     } catch (err: any) {
       alert(err.message || 'Failed to start quest');
@@ -261,7 +267,13 @@ export const QuestsPage: React.FC = () => {
         });
         await loadQuests();
       } else {
-        storage.addGuestXP(completingQuest.xp_reward || 50);
+        storage.completeGuestQuest(
+          completingQuest.id,
+          completionNotes,
+          completingQuest.xp_reward || 50,
+          completingQuest.skill_category || completingQuest.category || 'visual_explorer'
+        );
+        await loadQuests();
       }
 
       confetti({
@@ -296,6 +308,7 @@ export const QuestsPage: React.FC = () => {
       };
 
       const newQuest = await aiApi.generateQuest(payload);
+      storage.saveGuestCustomQuest(newQuest);
       setQuests(prev => [newQuest, ...prev]);
       setShowAIGenerateModal(false);
       setAiPrompt('');

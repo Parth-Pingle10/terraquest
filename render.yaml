@@ -11,12 +11,12 @@ services:
         value: production
       - key: APP_DEBUG
         value: "false"
+      - key: OLLAMA_MODEL
+        value: "moondream:v2"
+      - key: OLLAMA_TIMEOUT_SECONDS
+        value: "60"
       - key: ENABLE_VISION_MODEL
         value: "false"
-      - key: MONGODB_DB_NAME
-        value: terraquest
-      - key: MONGODB_URI
-        sync: false # Set in Render Dashboard: your external MongoDB Atlas connection URI
       - key: JWT_SECRET_KEY
         generateValue: true
       - key: SHARE_TOKEN_SALT

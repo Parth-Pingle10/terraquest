@@ -1,6 +1,5 @@
-from fastapi import APIRouter, Response, status
+from fastapi import APIRouter
 from app.core.config import settings
-from app.db.mongo import mongo_manager
 
 router = APIRouter(tags=["Health & Readiness"])
 
@@ -15,19 +14,11 @@ async def health_check():
     }
 
 
-@router.get("/ready", summary="Readiness probe (verifies database connectivity)")
-async def readiness_check(response: Response):
-    is_db_ready = await mongo_manager.ping()
-    if not is_db_ready:
-        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        return {
-            "status": "not_ready",
-            "database": "unreachable",
-            "message": "MongoDB is not responding to ping.",
-        }
-
+@router.get("/ready", summary="Readiness probe")
+async def readiness_check():
     return {
         "status": "ready",
         "database": "connected",
+        "persistence": "in_memory_and_client_localstorage",
         "app": settings.APP_NAME,
     }

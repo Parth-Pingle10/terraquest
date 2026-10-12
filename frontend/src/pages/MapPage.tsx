@@ -348,6 +348,7 @@ export const MapPage: React.FC = () => {
           radius_meters: 120,
         };
         setCells((prev) => [newCell, ...prev]);
+        storage.saveGuestCell(newCell);
         storage.addGuestXP(20);
         setMapCenter([lat, lon]);
         setCheckInSuccess({

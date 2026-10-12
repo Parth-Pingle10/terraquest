@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Optional
 from app.ai.deterministic_provider import DeterministicQuestProvider
-from app.ai.llamacpp_provider import LlamaCppProvider
 from app.ai.ollama_provider import OllamaProvider
 from app.core.config import settings
 from app.core.logging import logger
@@ -10,55 +9,38 @@ from app.models.quest import QuestModel
 
 class QuestAgent:
     """
-    High-level orchestrator that interfaces with local AI inference (llama.cpp or Ollama)
-    and falls back to DeterministicQuestProvider if local AI servers are offline,
+    High-level orchestrator that interfaces with Moondream via Ollama
+    and falls back to DeterministicQuestProvider if Ollama is offline,
     unconfigured, or resource-constrained.
     """
 
     def __init__(
         self,
-        llamacpp_provider: Optional[LlamaCppProvider] = None,
         ollama_provider: Optional[OllamaProvider] = None,
         deterministic_provider: Optional[DeterministicQuestProvider] = None,
     ) -> None:
-        self.llamacpp = llamacpp_provider or LlamaCppProvider()
         self.ollama = ollama_provider or OllamaProvider()
         self.deterministic = deterministic_provider or DeterministicQuestProvider()
 
     async def get_status(self) -> Dict[str, Any]:
         """Report connectivity and active provider status without leaking sensitive host info."""
-        llamacpp_reachable = await self.llamacpp.is_available()
         ollama_reachable = await self.ollama.is_available()
-        
-        ollama_model_available = await self.ollama.is_model_installed() if ollama_reachable else False
+        model_available = await self.ollama.is_model_installed() if ollama_reachable else False
         vision_available = (
-            await self.ollama.is_vision_model_installed()
-            if (ollama_reachable and settings.ENABLE_VISION_MODEL)
+            model_available and settings.ENABLE_VISION_MODEL
+            if ollama_reachable
             else False
         )
-
-        if llamacpp_reachable:
-            active = "llamacpp"
-            configured_model = settings.LLAMA_CPP_MODEL_PATH
-            model_available = True
-        elif ollama_reachable and ollama_model_available:
-            active = "ollama"
-            configured_model = settings.OLLAMA_MODEL
-            model_available = True
-        else:
-            active = "deterministic"
-            configured_model = "deterministic-rule-engine"
-            model_available = False
+        active = "ollama" if (ollama_reachable and model_available) else "deterministic"
 
         return {
             "ollama_reachable": ollama_reachable,
-            "llamacpp_reachable": llamacpp_reachable,
             "model_available": model_available,
             "vision_model_available": vision_available,
             "vision_model_enabled": settings.ENABLE_VISION_MODEL,
             "active_provider": active,
-            "configured_model": configured_model,
-            "configured_vision_model": settings.OLLAMA_VISION_MODEL if settings.ENABLE_VISION_MODEL else "disabled",
+            "configured_model": settings.OLLAMA_MODEL,
+            "configured_vision_model": settings.OLLAMA_MODEL if settings.ENABLE_VISION_MODEL else "disabled",
         }
 
     async def generate_quest(
@@ -70,20 +52,8 @@ class QuestAgent:
     ) -> QuestModel:
         """
         Generate a quest with automatic fallback:
-        Tries llama.cpp -> Ollama -> DeterministicQuestProvider.
+        Tries Moondream via Ollama -> DeterministicQuestProvider.
         """
-        if await self.llamacpp.is_available():
-            try:
-                logger.info("Generating quest via llama.cpp server (%s)...", self.llamacpp.base_url)
-                return await self.llamacpp.generate_quest(
-                    skill_category=skill_category,
-                    difficulty=difficulty,
-                    duration_minutes=duration_minutes,
-                    user_interests=user_interests,
-                )
-            except Exception as e:
-                logger.warning("llama.cpp quest generation failed (%s), trying secondary providers.", str(e))
-
         if await self.ollama.is_available():
             try:
                 logger.info("Attempting quest generation via Ollama model %s...", self.ollama.model_name)
@@ -112,17 +82,6 @@ class QuestAgent:
         """
         Generate a supportive reflection on what the user noticed.
         """
-        if await self.llamacpp.is_available():
-            try:
-                text = await self.llamacpp.generate_reflection(
-                    observation=observation,
-                    personal_reflection=personal_reflection,
-                    skill_category=skill_category,
-                )
-                return {"reflection_text": text, "source": "llamacpp"}
-            except Exception as e:
-                logger.warning("llama.cpp reflection failed (%s), trying secondary provider.", str(e))
-
         if await self.ollama.is_available():
             try:
                 text = await self.ollama.generate_reflection(
@@ -149,12 +108,6 @@ class QuestAgent:
         """
         Generate a follow-up challenge.
         """
-        if await self.llamacpp.is_available():
-            try:
-                return await self.llamacpp.generate_follow_up(quest_title, observation)
-            except Exception:
-                pass
-
         if await self.ollama.is_available():
             try:
                 return await self.ollama.generate_follow_up(quest_title, observation)

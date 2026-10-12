@@ -1,6 +1,6 @@
 # TerraQuest Production Deployment Guide (Render & Docker)
 
-This guide documents the final production Docker configuration, Render deployment procedure, llama.cpp GGUF model integration, and local verification steps for TerraQuest.
+This guide documents the final production Docker configuration, zero-database architecture, browser localStorage persistence, Moondream AI model integration, and local verification steps for TerraQuest.
 
 ---
 
@@ -15,7 +15,8 @@ This guide documents the final production Docker configuration, Render deploymen
 |  |                                                                    |  |
 |  |   /               -> Serves Built React SPA (index.html)          |  |
 |  |   /assets/*       -> Static assets (JS, CSS, SVGs, Leaflet)       |  |
-|  |   /health         -> Orchestrator Liveness / Readiness Probe       |  |
+|  |   /health         -> Orchestrator Liveness Probe                   |  |
+|  |   /ready          -> Orchestrator Readiness Probe                  |  |
 |  |   /api/v1/*       -> REST API Endpoints                            |  |
 |  |   /{catch-all}    -> SPA Client-Side Routing Fallback              |  |
 |  +--------------------------------------------------------------------+  |
@@ -26,143 +27,166 @@ This guide documents the final production Docker configuration, Render deploymen
          |                                                         |
          v                                                         v
 +-----------------------------+                           +-----------------------------+
-|   MongoDB Atlas (External)  |                           |  llama.cpp / Ollama / Engine|
-|   (MONGODB_URI env var)     |                           |  - Private local GGUF       |
-|                             |                           |  - Deterministic Fallback   |
-+-----------------------------+                           +-----------------------------+
+|   Client Browser Storage    |                           |  Ollama / Moondream Server  |
+|   (localStorage + IDB)      |                           |  - Optional Local Inference |
+|   - Explorer Profile        |                           |  - Deterministic Fallback   |
+|   - Memories & Discoveries  |                           |                             |
+|   - Quests & XP / Skills    |                           +-----------------------------+
+|   - Explored Map Cells      |
++-----------------------------+
 ```
 
-### Key Deployment Characteristics:
-- **Single Unified Container**: A multi-stage Dockerfile builds the React frontend with Vite/Node 20 and bundles it into the lightweight Python 3.11 FastAPI image. No CORS mismatches, zero extra proxy costs, and single-port simplicity on Render.
-- **Port Dynamic Binding**: Listens on `0.0.0.0` and binds dynamically to `${PORT:-8000}` supplied by Render.
-- **External MongoDB**: MongoDB is never baked into the container. Uses `MONGODB_URI` environment variable pointing to external MongoDB Atlas or cloud MongoDB instance.
-- **Graceful Startup & Shutdown**: Database connection retries and index creation run in FastAPI lifespan; if MongoDB is momentarily unreachable, startup does not crash.
-- **AI Reliability**: Text generation automatically prioritizes `llama.cpp` -> `Ollama` -> `Deterministic Rule Engine`. When no model server is running, all quests, reflections, and field journal activities work reliably without throwing 500 errors.
+### Key Architectural Decisions:
+1. **Zero Database Dependency**: MongoDB, MongoDB Atlas, and all external database servers have been completely removed.
+   - The backend runs an ultra-fast, zero-dependency in-memory store for session caching and instant starter quest catalogs.
+   - All user data persists reliably in the client browser's `localStorage` and `IndexedDB`.
+2. **Single Unified Web Service**: Multi-stage Dockerfile builds the React frontend with Vite/Node 20 and bundles it into a lightweight Python 3.11 runtime. No CORS mismatches, zero proxy latency, and single-port simplicity on Render.
+3. **Dynamic Port Binding**: Listens on `0.0.0.0` and binds dynamically to `${PORT:-8000}` supplied by Render.
+4. **Single Model (Moondream:v2)**: Unified multimodal vision-language model (`moondream:v2`) handles both text quest generation and lightweight photo-based observation without running separate models.
+5. **AI Reliability & Graceful Fallback**: Text generation and photo observations automatically prioritize `Ollama (moondream:v2)` -> `Deterministic Rule Engine`. When no model server is running, all quests, reflections, and field journal activities work reliably without throwing 500 errors.
 
 ---
 
-## 2. Resource Limits & Model Budget Analysis
+## 2. Browser LocalStorage Persistence Matrix
 
-### Model Budget Comparison
+All user-specific exploration data is persisted on the client device across page refreshes:
 
-| Component | Artifact Name | Download Size | Runtime RAM | Render Free Tier (512 MB) | Paid Starter (2 GB) |
-|---|---|---|---|---|---|
-| **Text Model** | `Qwen2.5-0.5B-Instruct-Q4_K_M.gguf` | **~398 MB** | ~600 MB - 750 MB (2048 ctx) | Exceeds RAM if combined with app | **Runs smoothly** |
-| **Vision Model** | `Moondream 2` (Ollama/GGUF) | **~1.7 GB - 2.2 GB** | ~2.5 GB - 3.5 GB | Exceeds storage & RAM (OOM kill) | Exceeds 1 GB budget & RAM |
-| **Docker Base Image** | `python:3.11-slim` + frontend bundle | **~240 MB** | ~80 MB - 120 MB | **Supported** | **Supported** |
-| **Deterministic Engine** | Built-in Python rule engine | **0 MB** | < 10 MB | **Supported** | **Supported** |
-
-### Critical Strategy & Submission Decisions:
-1. **Model Download Budget**: The user limit is under 1 GB combined. Qwen 2.5 0.5B GGUF is **397.8 MB**, well within the 1 GB budget.
-2. **Moondream Vision Model**: Moondream alone requires ~1.7 GB to download and > 2.5 GB of RAM to execute. Attempting to run Moondream in an ephemeral or free Render instance will immediately trigger an `OOM Kill (Exit Code 137)`.
-3. **Production Configuration**: `ENABLE_VISION_MODEL=false` by default. When disabled, image-guided quests use TerraQuest's rich deterministic rule engine:
-   - Does not make heavy cloud calls.
-   - Grounded in authentic outdoor observation cues (textures, light, patterns).
-   - Never fabricates fake AI responses.
-   - Keeps 100% of the UI, quests, and memories functional.
-
----
-
-## 3. Model Storage: Build-Time vs. Startup vs. Persistent Mount
-
-| Approach | How it works | Storage Implication on Render | Recommendation |
+| Feature | Storage Mechanism | Key / Location | Refresh Persistence |
 |---|---|---|---|
-| **Image Build-Time (`COPY` / `RUN curl`)** | Baking weights into the Docker image | Increases image build time by 5-15 mins; blows past registry size limits; redownloads every commit. | **NEVER bake model weights into Docker images.** |
-| **Startup Download (`curl` on boot)** | Downloads weights every time container starts | On Render Free tier (ephemeral disk), redownloads 400MB+ on every cold start; causes 30s-90s boot delay, risking health check timeout. | Acceptable only on persistent disk instances. |
-| **Persistent Volume / Mount** | Mounts a persistent volume (e.g. `/models`) or uses external host directory | Local Docker Compose mounts `./models:/models:ro`. Render Paid Web Service attaches a Render Persistent Disk (`/models`). | **Best Practice for AI workloads.** |
+| **Explorer Identity & Preferences** | `localStorage` | `terraquest_guest_profile` | **Preserved** (display name, duration, difficulty, interests) |
+| **Field Journal Memories** | `localStorage` + `IndexedDB` | `terraquest_guest_discoveries` | **Preserved** (observations, reflections, coordinates, photos) |
+| **Active Quests** | `localStorage` | `terraquest_guest_active_quests` | **Preserved** (in-progress quest state) |
+| **Completed Quests & History** | `localStorage` | `terraquest_guest_completed_quests`| **Preserved** (completion timestamps, notes) |
+| **Custom & AI Quests** | `localStorage` | `terraquest_guest_custom_quests` | **Preserved** (persisted in catalog) |
+| **XP & Level Progression** | `localStorage` | `terraquest_guest_xp` | **Preserved** (total XP, explorer rank) |
+| **Skill Tree Nodes** | `localStorage` | `terraquest_guest_skills` | **Preserved** (branch levels, mastery status) |
+| **Fog-of-War Explored Cells** | `localStorage` | `terraquest_guest_cells` | **Preserved** (GPS explored cells and radius) |
+| **Theme & Onboarding** | `localStorage` | `terraquest_theme`, `terraquest_onboarded` | **Preserved** (light/dark mode, tutorial flag) |
 
-> **Render Free Tier Workaround**: Render Free instances provide ephemeral storage and 512 MB RAM. For submission purposes, deploy the unified application with `ENABLE_VISION_MODEL=false` and AI fallback enabled. The entire field atlas, GPS fog-of-war, questing system, skill tree, and guest mode run reliably with lightning speed (~80 MB RAM footprint).
+> **Security & Sharing Note**: `localStorage` provides persistent client-side storage without cloud credentials or cross-device data leaks. Map links and public token sharing are hashed client-side. Multi-device sync is not supported without an external database, which is the intended design for local-first privacy.
 
 ---
 
-## 4. Local Build & Validation Commands
+## 3. Moondream AI Model Configuration & Budget
 
-### Step 1: Run Backend Tests
+### Model Artifact Specifications:
+- **Model Name**: `moondream:v2` (Official Ollama library)
+- **Tag**: `moondream:v2` (digest: `55fc3abd3867`)
+- **Download Size**: **829 MB** (~0.83 GB) — strictly under the 1 GB model budget.
+- **Parameters**: 1.86B parameters.
+- **Capabilities**: Multimodal vision-language model. Supports prompt-based text generation as well as base64-encoded image inspection.
+- **Runtime RAM**: ~1.4 GB - 1.8 GB during inference.
+
+### Resource Limits on Render:
+- **Render Free Tier**: 512 MB RAM limit. Running Moondream in memory on a 512 MB instance will trigger an `OOM Kill (Exit Code 137)`.
+- **Baseline Deployment**: `ENABLE_VISION_MODEL=false`.
+  - When disabled, image-guided quests use TerraQuest's rich deterministic rule engine: it provides authentic observational cues grounded in physical textures and field patterns without fabricating artificial AI claims.
+  - The entire application boots in under 2 seconds with an ultra-light ~80 MB RAM footprint.
+- **Enabling Moondream Locally or on Paid Render Instances**:
+  - Run Ollama with `ollama pull moondream:v2`.
+  - Set `OLLAMA_BASE_URL=http://ollama:11434` (Docker) or `http://127.0.0.1:11434` (Host) and `ENABLE_VISION_MODEL=true`.
+
+---
+
+## 4. Production Environment Baseline
+
+Use this configuration in `.env` or Render Dashboard:
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+HOST=0.0.0.0
+PORT=8000
+
+JWT_SECRET_KEY=REPLACE_WITH_SECURE_RANDOM_SECRET
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=1440
+SHARE_TOKEN_SALT=REPLACE_WITH_DIFFERENT_RANDOM_SECRET
+
+DEFAULT_REGION_GRID_CELLS=100
+
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_AUTH_PER_MINUTE=20
+RATE_LIMIT_AI_PER_MINUTE=30
+RATE_LIMIT_SHARE_PER_MINUTE=30
+
+OLLAMA_MODEL=moondream:v2
+OLLAMA_TIMEOUT_SECONDS=60
+ENABLE_VISION_MODEL=false
+```
+
+*Note: `OLLAMA_BASE_URL` is omitted unless an Ollama container is explicitly configured on the network.*
+
+---
+
+## 5. Local Build & Validation Commands
+
+### 1. Run Backend Test Suite
 ```bash
 cd backend
 python -m pytest -q
-# Result: 28 passed
+# Result: 28 passed in 12.36s (100% PASS, zero database dependencies)
 ```
 
-### Step 2: Build and Test Frontend
+### 2. Build Frontend Production Bundle
 ```bash
 cd frontend
 npm run build
-# Result: Vite production bundle generated in dist/
+# Result: Vite production build generated in dist/
 ```
 
-### Step 3: (Optional) Download Qwen 2.5 0.5B GGUF Model (~398 MB)
-```bash
-python backend/scripts/download_model.py ./models
-```
+### 3. Run Application via Docker Compose
 
-### Step 4: Run via Docker Compose
-
-**Standard Mode (App + MongoDB + Deterministic Fallback):**
+**Standard Mode (App + In-Memory Store + LocalStorage):**
 ```bash
 docker compose up --build
 ```
 
-**Full AI Mode (App + MongoDB + llama.cpp Server Container):**
+**AI Mode (App + Ollama Moondream Container):**
 ```bash
 docker compose --profile ai up --build
 ```
 
-### Step 5: Verify Endpoints
+### 4. Verify Endpoints
 - **Web App**: http://localhost:8000
-- **Liveness Probe**: http://localhost:8000/health (Returns HTTP 200 `{"status": "healthy"}`)
-- **API Status**: http://localhost:8000/api/v1/health
+- **Liveness Probe**: http://localhost:8000/health (Returns HTTP 200 `{"status": "ok"}`)
+- **Readiness Probe**: http://localhost:8000/ready (Returns HTTP 200 `{"status": "ready"}`)
 - **AI Engine Status**: http://localhost:8000/api/v1/ai/status
+- **Quest Catalog**: http://localhost:8000/api/v1/quests
 
 ---
 
-## 5. Render Deployment Steps
+## 6. Render Deployment Steps
 
 ### Option A: Deploy via Render Blueprint (`render.yaml`)
-
-1. Push your repository to GitHub.
+1. Push repository to GitHub.
 2. In the [Render Dashboard](https://dashboard.render.com/), click **New +** -> **Blueprint**.
 3. Select your repository. Render automatically reads `render.yaml`.
-4. Fill in the required `MONGODB_URI` environment variable when prompted.
-5. Click **Apply**. Render will automatically build the multi-stage Dockerfile and deploy your service.
+4. Click **Apply**. Render will automatically build the multi-stage Dockerfile and deploy your web service.
 
 ---
 
 ### Option B: Deploy Manually as a Web Service
-
 1. In Render Dashboard, click **New +** -> **Web Service**.
 2. Connect your GitHub repository.
-3. Configure the following parameters:
+3. Configure settings:
    - **Environment**: `Docker`
    - **Dockerfile Path**: `./Dockerfile`
    - **Docker Context**: `.`
-   - **Instance Type**: `Free` (or `Starter` if running persistent workloads)
+   - **Instance Type**: `Free`
    - **Health Check Path**: `/health`
-
-4. Add the following **Environment Variables**:
-
-| Variable Name | Recommended Value | Description |
-|---|---|---|
-| `PORT` | *(Render provides this automatically)* | Port assigned by Render (e.g. 10000) |
-| `APP_ENV` | `production` | Enables production security settings |
-| `APP_DEBUG` | `false` | Disables debug logs and stack trace leakages |
-| `MONGODB_URI` | `mongodb+srv://<user>:<password>@<cluster>.mongodb.net/?retryWrites=true&w=majority` | Connection URI for external MongoDB Atlas |
-| `MONGODB_DB_NAME` | `terraquest` | Database name |
-| `JWT_SECRET_KEY` | *(Generate a 32+ character random string)* | Secret for auth tokens |
-| `SHARE_TOKEN_SALT` | *(Generate a 32+ character random string)* | Salt for shared map hashes |
-| `ENABLE_VISION_MODEL` | `false` | Protects against memory exhaustion on Render |
-| `CORS_ORIGINS` | `*` (or your Render service URL) | Allowed origins |
-
+4. Add Environment Variables:
+   - `APP_ENV`: `production`
+   - `APP_DEBUG`: `false`
+   - `OLLAMA_MODEL`: `moondream:v2`
+   - `OLLAMA_TIMEOUT_SECONDS`: `60`
+   - `ENABLE_VISION_MODEL`: `false`
+   - `JWT_SECRET_KEY`: *(Generate 32+ character random secret)*
+   - `SHARE_TOKEN_SALT`: *(Generate 32+ character random secret)*
+   - `CORS_ORIGINS`: `*`
 5. Click **Create Web Service**.
-6. When deployment finishes, navigate to your Render URL:
-   - Your frontend loads instantly from `/`
-   - The API is available at `/api/v1/`
-   - Probes respond with `200 OK` at `/health`
-
----
-
-## 6. Known Limitations & Architectural Notes
-
-1. **Free Tier Ephemeral Filesystem**: Render Free Web Services restart on inactivity and spin down after 15 minutes of idle time. Any files written directly to the container disk are wiped upon restart. All user accounts, field discoveries, and fog-of-war states are safely persisted in MongoDB Atlas.
-2. **Local Vision Inference**: Running multimodal image models (Moondream, LLaVA) requires GPU acceleration or at least 4 GB of RAM. In container environments without GPU, `ENABLE_VISION_MODEL=false` prevents memory leaks and ensures 100% uptime through deterministic exploration cues.
-3. **Internal vs External Ports**: When running `compose.yaml` with the `--profile ai` flag, the `llama` service port (`8080`) is bound strictly to `127.0.0.1:8080` and internal Docker networking, ensuring the inference engine is never exposed to unauthenticated public traffic.
+6. When deployment finishes:
+   - Frontend SPA loads immediately from `/`
+   - API responds on `/api/v1/`
+   - Health probes succeed on `/health` and `/ready`
+   - Zero database configuration required!

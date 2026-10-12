@@ -16,7 +16,8 @@ from app.models.quest import QuestModel
 
 class OllamaProvider(AIProvider):
     """
-    Communicates with local Ollama instance via HTTP API.
+    Communicates with local Ollama instance running the unified Moondream vision-language model.
+    Moondream provides both text quest generation and lightweight photo-based observation.
     Runs entirely offline on local hardware with zero external cloud dependencies.
     """
 
@@ -26,57 +27,46 @@ class OllamaProvider(AIProvider):
         model_name: Optional[str] = None,
         timeout: Optional[float] = None,
     ) -> None:
-        self.base_url = (base_url or settings.OLLAMA_BASE_URL).rstrip("/")
+        raw_url = base_url if base_url is not None else settings.OLLAMA_BASE_URL
+        self.base_url = raw_url.rstrip("/") if raw_url else None
         self.model_name = model_name or settings.OLLAMA_MODEL
         self.timeout = timeout or settings.OLLAMA_TIMEOUT_SECONDS
 
     async def is_available(self) -> bool:
-        """Check if local Ollama daemon is reachable and whether configured model is present."""
+        """Check if local Ollama daemon is configured and reachable."""
+        if not self.base_url:
+            return False
         try:
             async with httpx.AsyncClient(timeout=2.0) as client:
                 res = await client.get(f"{self.base_url}/api/tags")
-                if res.status_code == 200:
-                    data = res.json()
-                    models = [m.get("name", "") for m in data.get("models", [])]
-                    # Check if model or tag matches
-                    for m in models:
-                        if self.model_name in m or m in self.model_name:
-                            return True
-                    # Daemon is up even if specific model name isn't pulled yet
-                    return True
+                return res.status_code == 200
         except Exception:
             return False
-        return False
 
     async def is_model_installed(self) -> bool:
-        """Verify if the exact configured model exists locally in Ollama."""
+        """Verify if the configured Moondream model/tag exists in Ollama."""
+        if not self.base_url:
+            return False
         try:
             async with httpx.AsyncClient(timeout=2.0) as client:
                 res = await client.get(f"{self.base_url}/api/tags")
                 if res.status_code == 200:
                     data = res.json()
-                    for m in data.get("models", []):
-                        name = m.get("name", "")
-                        if self.model_name == name or name.startswith(f"{self.model_name}:"):
+                    installed_models = [m.get("name", "").lower() for m in data.get("models", [])]
+                    target = self.model_name.lower()
+                    for m in installed_models:
+                        if target == m or m.startswith(f"{target}:") or target.startswith(f"{m}:"):
+                            return True
+                        # Allow tag matching (e.g. moondream:v2 matching moondream)
+                        if "moondream" in target and "moondream" in m:
                             return True
         except Exception:
             return False
         return False
 
     async def is_vision_model_installed(self) -> bool:
-        """Verify if the configured Moondream vision model exists locally in Ollama."""
-        try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
-                res = await client.get(f"{self.base_url}/api/tags")
-                if res.status_code == 200:
-                    data = res.json()
-                    for m in data.get("models", []):
-                        name = m.get("name", "").lower()
-                        if "moondream" in name or name.startswith(settings.OLLAMA_VISION_MODEL.lower()):
-                            return True
-        except Exception:
-            return False
-        return False
+        """Since Moondream is a multimodal vision-language model, check if Moondream is installed."""
+        return await self.is_model_installed()
 
     async def generate_quest(
         self,
@@ -85,6 +75,9 @@ class OllamaProvider(AIProvider):
         duration_minutes: int,
         user_interests: List[str],
     ) -> QuestModel:
+        if not self.base_url:
+            raise AIUnavailableError("Ollama base URL is not configured")
+
         prompt = format_quest_generation_prompt(
             skill_category=skill_category,
             difficulty=difficulty,
@@ -111,6 +104,9 @@ class OllamaProvider(AIProvider):
                 
                 result = response.json()
                 raw_response = result.get("response", "")
+        except httpx.TimeoutException:
+            logger.warning("Ollama quest generation timed out after %s seconds", self.timeout)
+            raise AIUnavailableError(f"Ollama request timed out after {self.timeout}s")
         except httpx.RequestError as e:
             logger.warning("Failed to reach Ollama at %s: %s", self.base_url, str(e))
             raise AIUnavailableError(f"Ollama connection error: {str(e)}")
@@ -121,9 +117,6 @@ class OllamaProvider(AIProvider):
             default_difficulty=difficulty,
             default_duration=duration_minutes,
         )
-        if not quest:
-            raise AIUnavailableError("Failed to validate structured JSON output from Ollama")
-
         return quest
 
     async def generate_reflection(
@@ -132,10 +125,13 @@ class OllamaProvider(AIProvider):
         personal_reflection: Optional[str] = None,
         skill_category: Optional[SkillCategory] = None,
     ) -> str:
+        if not self.base_url:
+            raise AIUnavailableError("Ollama base URL is not configured")
+
         prompt = format_reflection_prompt(
             observation=observation,
-            personal_reflection=personal_reflection or "",
-            skill_category=skill_category.value if skill_category else "explorer",
+            personal_reflection=personal_reflection,
+            skill_category=skill_category,
         )
 
         payload = {
@@ -143,48 +139,63 @@ class OllamaProvider(AIProvider):
             "prompt": prompt,
             "stream": False,
             "options": {
-                "temperature": 0.6,
+                "temperature": 0.75,
+                "top_p": 0.9,
             },
         }
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/generate", json=payload)
-                if response.status_code == 200:
-                    result = response.json()
-                    text = result.get("response", "").strip()
-                    if text:
-                        return text
+                if response.status_code != 200:
+                    raise AIUnavailableError(f"Ollama returned HTTP {response.status_code}")
+                result = response.json()
+                return result.get("response", "").strip() or "Take a moment to absorb the quiet details around you."
         except Exception as e:
             logger.warning("Ollama reflection generation error: %s", str(e))
-            raise AIUnavailableError(f"Ollama reflection error: {str(e)}")
-
-        raise AIUnavailableError("Empty reflection returned by model")
+            raise AIUnavailableError(f"Reflection generation error: {str(e)}")
 
     async def generate_follow_up(
         self,
         quest_title: str,
         observation: str,
     ) -> Dict[str, Any]:
-        prompt = f"""Based on the quest '{quest_title}' and observation '{observation}', suggest a 1-sentence follow-up challenge for the user's next walk."""
+        if not self.base_url:
+            raise AIUnavailableError("Ollama base URL is not configured")
+
+        prompt = (
+            f"An outdoor explorer completed the observation quest: '{quest_title}'.\n"
+            f"Here is what they noticed: '{observation}'.\n\n"
+            f"Suggest a brief, curious follow-up observation micro-challenge. "
+            f"Output JSON with keys: title, instruction, observation_tip."
+        )
+
         payload = {
             "model": self.model_name,
             "prompt": prompt,
+            "format": "json",
             "stream": False,
+            "options": {
+                "temperature": 0.7,
+            },
         }
+
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                res = await client.post(f"{self.base_url}/api/generate", json=payload)
-                if res.status_code == 200:
-                    text = res.json().get("response", "").strip()
-                    return {
-                        "follow_up_prompt": text,
-                        "suggested_skill": SkillCategory.VISUAL_EXPLORER,
-                        "source": "ollama",
-                    }
+                response = await client.post(f"{self.base_url}/api/generate", json=payload)
+                if response.status_code != 200:
+                    raise AIUnavailableError("Ollama follow-up call failed")
+                import json
+                result = response.json()
+                parsed = json.loads(result.get("response", "{}"))
+                return {
+                    "title": str(parsed.get("title", f"Beyond {quest_title}")),
+                    "instruction": str(parsed.get("instruction", "Look closer at one texture or contour you noted.")),
+                    "observation_tip": str(parsed.get("observation_tip", "Pay attention to light and shadow.")),
+                }
         except Exception as e:
+            logger.warning("Ollama follow-up generation failed: %s", str(e))
             raise AIUnavailableError(str(e))
-        raise AIUnavailableError("Ollama follow-up error")
 
     async def analyze_image(
         self,
@@ -193,9 +204,12 @@ class OllamaProvider(AIProvider):
         skill_category: Optional[SkillCategory] = None,
     ) -> Dict[str, Any]:
         """
-        Invokes Ollama with the lightweight Moondream vision model.
+        Invokes Ollama with the lightweight Moondream vision-language model.
         Extracts directly observable surface textures, contours, and physical traits.
         """
+        if not self.base_url:
+            raise AIUnavailableError("Ollama base URL is not configured")
+
         # Strip any data URI header prefix (e.g. data:image/jpeg;base64,...)
         clean_b64 = image_base64
         if "base64," in clean_b64:
@@ -209,7 +223,7 @@ class OllamaProvider(AIProvider):
         )
 
         payload = {
-            "model": settings.OLLAMA_VISION_MODEL,
+            "model": self.model_name,
             "prompt": vision_prompt,
             "images": [clean_b64],
             "stream": False,
@@ -220,10 +234,10 @@ class OllamaProvider(AIProvider):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=settings.OLLAMA_VISION_TIMEOUT_SECONDS) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.post(f"{self.base_url}/api/generate", json=payload)
                 if response.status_code != 200:
-                    raise AIUnavailableError(f"Ollama vision returned HTTP {response.status_code}")
+                    raise AIUnavailableError(f"Ollama Moondream returned HTTP {response.status_code}")
                 result = response.json()
                 raw_description = result.get("response", "").strip()
                 if not raw_description:
@@ -246,6 +260,9 @@ class OllamaProvider(AIProvider):
                     "uncertainty_note": "Visual observation grounded in directly discernible textures and shapes.",
                     "source": "moondream",
                 }
+        except httpx.TimeoutException:
+            logger.warning("Moondream image analysis timed out after %s seconds", self.timeout)
+            raise AIUnavailableError(f"Moondream vision timed out after {self.timeout}s")
         except httpx.RequestError as e:
             logger.warning("Failed to reach Ollama for vision inference: %s", str(e))
             raise AIUnavailableError(f"Ollama vision connection error: {str(e)}")
@@ -259,22 +276,47 @@ class OllamaProvider(AIProvider):
         """
         Analyze an image via Moondream and contextualize a guided observation quest.
         """
-        analysis = await self.analyze_image(image_base64, skill_category=skill_category)
-        diff = difficulty or QuestDifficulty.BEGINNER
-        cat = skill_category or analysis["perceived_category"]
-
-        primary_detail = analysis["observable_details"][0] if analysis["observable_details"] else "observed textures"
-
-        quest = await self.generate_quest(
-            skill_category=cat,
-            difficulty=diff,
-            duration_minutes=15,
-            user_interests=[primary_detail],
+        analysis = await self.analyze_image(
+            image_base64=image_base64,
+            prompt="Identify two visible physical details or materials an explorer could examine closely.",
+            skill_category=skill_category,
         )
 
-        return {
-            "analysis": analysis,
-            "quest": quest,
-            "source": "moondream",
+        category = skill_category or analysis["perceived_category"]
+        diff = difficulty or QuestDifficulty.BEGINNER
+        context = analysis.get("description", "Field photo observation")
+
+        quest_prompt = (
+            f"Create a mindful field quest based on this observed scene: '{context}'. "
+            f"Encourage safe, respectful noticing. Output JSON with fields: "
+            f"title, instructions, reflection_questions (list of 2), completion_criteria."
+        )
+
+        payload = {
+            "model": self.model_name,
+            "prompt": quest_prompt,
+            "system": SYSTEM_QUEST_PROMPT,
+            "stream": False,
+            "options": {"temperature": 0.7},
         }
 
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(f"{self.base_url}/api/generate", json=payload)
+                if resp.status_code == 200:
+                    raw = resp.json().get("response", "")
+                    quest = repair_and_validate_quest(
+                        raw_text=raw,
+                        default_category=category,
+                        default_difficulty=diff,
+                        default_duration=15,
+                    )
+                    analysis["generated_quest"] = quest.model_dump()
+        except Exception as e:
+            logger.warning("Ollama quest generation from image failed: %s; using deterministic fallback", str(e))
+            from app.ai.deterministic_provider import DeterministicQuestProvider
+            det = DeterministicQuestProvider()
+            det_res = await det.generate_quest_from_image(image_base64, category, diff)
+            analysis["generated_quest"] = det_res["generated_quest"]
+
+        return analysis

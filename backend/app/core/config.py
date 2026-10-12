@@ -1,5 +1,5 @@
 from typing import List, Optional, Union
-from pydantic import Field, field_validator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,11 +19,6 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
 
-    # MongoDB
-    MONGODB_URI: str = "mongodb://localhost:27017"
-    MONGODB_DB_NAME: str = "terraquest"
-    MONGODB_TIMEOUT_MS: int = 5000
-
     # Security
     JWT_SECRET_KEY: str = "dev-insecure-secret-key-please-replace-in-production-32-chars-min"
     JWT_ALGORITHM: str = "HS256"
@@ -38,26 +33,6 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
     ]
 
-    # llama.cpp Local GGUF Inference
-    LLAMA_CPP_BASE_URL: str = "http://127.0.0.1:8080"
-    LLAMA_CPP_MODEL_PATH: str = "/models/qwen2.5-0.5b-instruct-q4_k_m.gguf"
-    LLAMA_CPP_TIMEOUT_SECONDS: float = 15.0
-    LLAMA_CPP_CONTEXT_SIZE: int = 2048
-    LLAMA_CPP_MAX_TOKENS: int = 512
-
-    # Ollama Local AI (Alternative local inference)
-    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
-    OLLAMA_MODEL: str = "qwen2.5:0.5b"
-    OLLAMA_VISION_MODEL: str = "moondream:latest"
-    OLLAMA_TIMEOUT_SECONDS: float = 10.0
-    OLLAMA_VISION_TIMEOUT_SECONDS: float = 25.0
-
-    # Vision Model Toggle (disabled by default for production/low-memory stability)
-    ENABLE_VISION_MODEL: bool = False
-
-    # Frontend Single-Service Serving
-    FRONTEND_DIST_DIR: Optional[str] = None
-
     # Exploration & Map
     DEFAULT_REGION_GRID_CELLS: int = 100
 
@@ -66,6 +41,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH_PER_MINUTE: int = 20
     RATE_LIMIT_AI_PER_MINUTE: int = 30
     RATE_LIMIT_SHARE_PER_MINUTE: int = 30
+
+    # Local AI - Moondream Vision-Language Model
+    OLLAMA_BASE_URL: Optional[str] = None
+    OLLAMA_MODEL: str = "moondream:v2"
+    OLLAMA_TIMEOUT_SECONDS: float = 60.0
+    ENABLE_VISION_MODEL: bool = False
+
+    # Frontend Single-Service Serving
+    FRONTEND_DIST_DIR: Optional[str] = None
 
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod

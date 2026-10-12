@@ -1,7 +1,5 @@
-version: "3.8"
-
 services:
-  # TerraQuest FastAPI Backend
+  # TerraQuest FastAPI Backend (Zero-Database Architecture)
   backend:
     build:
       context: .
@@ -15,38 +13,9 @@ services:
       - APP_DEBUG=false
       - HOST=0.0.0.0
       - PORT=8000
-      - MONGODB_URI=mongodb://mongodb:27017
-      - MONGODB_DB_NAME=terraquest
+      - OLLAMA_MODEL=moondream:v2
+      - OLLAMA_TIMEOUT_SECONDS=60
+      - ENABLE_VISION_MODEL=false
       - JWT_SECRET_KEY=change-this-in-production-to-a-secure-secret-32-chars
       - SHARE_TOKEN_SALT=terraquest-salt-docker-production
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
-      # When connecting to Ollama running on the host machine from inside Docker:
-      - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - OLLAMA_MODEL=qwen2.5:0.5b
-      - OLLAMA_TIMEOUT_SECONDS=15.0
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  # MongoDB Service (Shared persistence for maps, discoveries, shares, quests)
-  mongodb:
-    image: mongo:7.0
-    container_name: terraquest-mongodb
-    restart: unless-stopped
-    # Bind to localhost only so database is not exposed to public internet
-    ports:
-      - "127.0.0.1:27017:27017"
-    volumes:
-      - mongo-data:/data/db
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
-
-volumes:
-  mongo-data:
-    driver: local

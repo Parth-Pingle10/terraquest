@@ -1,87 +1,12 @@
 import asyncio
 from typing import AsyncGenerator, Dict, Tuple
-import mongomock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
-from app.db.mongo import mongo_manager
+from app.db.memory_store import InMemoryDatabase, db_manager
 from app.main import create_app
-
-
-class AsyncMockCursor:
-    def __init__(self, sync_cursor):
-        self._cursor = sync_cursor
-
-    def sort(self, *args, **kwargs):
-        self._cursor.sort(*args, **kwargs)
-        return self
-
-    def skip(self, n):
-        self._cursor.skip(n)
-        return self
-
-    def limit(self, n):
-        self._cursor.limit(n)
-        return self
-
-    def __aiter__(self):
-        self._iter = iter(self._cursor)
-        return self
-
-    async def __anext__(self):
-        try:
-            return next(self._iter)
-        except StopIteration:
-            raise StopAsyncIteration
-
-
-class AsyncMockCollection:
-    def __init__(self, sync_col):
-        self._col = sync_col
-
-    async def insert_one(self, doc):
-        return self._col.insert_one(doc)
-
-    async def insert_many(self, docs):
-        return self._col.insert_many(docs)
-
-    async def find_one(self, filter=None, *args, **kwargs):
-        return self._col.find_one(filter, *args, **kwargs)
-
-    def find(self, *args, **kwargs):
-        return AsyncMockCursor(self._col.find(*args, **kwargs))
-
-    async def find_one_and_update(self, filter, update, *args, **kwargs):
-        return self._col.find_one_and_update(filter, update, *args, **kwargs)
-
-    async def update_one(self, filter, update, *args, **kwargs):
-        return self._col.update_one(filter, update, *args, **kwargs)
-
-    async def delete_one(self, filter, *args, **kwargs):
-        return self._col.delete_one(filter, *args, **kwargs)
-
-    async def count_documents(self, filter=None, *args, **kwargs):
-        return self._col.count_documents(filter or {})
-
-    async def distinct(self, key, filter=None, *args, **kwargs):
-        return self._col.distinct(key, filter or {})
-
-    async def create_index(self, *args, **kwargs):
-        return "mock_idx"
-
-
-class AsyncMockDB:
-    def __init__(self):
-        self._client = mongomock.MongoClient()
-        self._db = self._client["test_terraquest"]
-
-    def __getattr__(self, name):
-        return AsyncMockCollection(self._db[name])
-
-    def __getitem__(self, name):
-        return AsyncMockCollection(self._db[name])
 
 
 @pytest.fixture(scope="session")
@@ -93,10 +18,9 @@ def event_loop():
 
 @pytest_asyncio.fixture(scope="function")
 async def mock_db():
-    db = AsyncMockDB()
-    mongo_manager.set_override_database(db)
-    yield db
-    mongo_manager.clear_override()
+    fresh_db = InMemoryDatabase()
+    db_manager._db = fresh_db
+    yield fresh_db
 
 
 @pytest_asyncio.fixture(scope="function")

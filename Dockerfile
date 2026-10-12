@@ -36,6 +36,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HOST=0.0.0.0 \
     APP_ENV=production \
     APP_DEBUG=false \
+    OLLAMA_MODEL=moondream:v2 \
+    OLLAMA_TIMEOUT_SECONDS=60 \
     ENABLE_VISION_MODEL=false
 
 # Install minimal OS dependencies if needed and clean cache
